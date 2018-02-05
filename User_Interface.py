@@ -46,7 +46,7 @@ class App(QMainWindow):
  
     def __init__(self):
         super().__init__()
-        self.title = 'Sample UI version 1.0 -- CSPL'
+        self.title = 'Sample UI version 1.0 -- CPSL'
         self.left = 10
         self.top = 10
         self.width = 600
@@ -68,6 +68,10 @@ class App(QMainWindow):
         label3 = QLabel('Sensor Id:', self)
         label3.move(5,75)
 
+        self.output_text = QLabel('', self)
+        self.output_text.move(250,75)
+        self.output_text.resize(300,20)
+
         self.textbox2 = QLineEdit(self)
         self.textbox2.move(70, 20)
         self.textbox2.resize(140,20)
@@ -80,7 +84,7 @@ class App(QMainWindow):
         self.textbox3.move(70, 80)
         self.textbox3.resize(140,20)
 
-        self.statusBar().showMessage('WUSTL CSPL')
+        self.statusBar().showMessage('WUSTL CPSL')
         button.clicked.connect(self.on_click)
         self.option = 0
 
@@ -89,9 +93,10 @@ class App(QMainWindow):
         self.combo.addItem("Average Temperature")
         self.combo.addItem("Latest Temperature")
         self.combo.move(250, 15)
+        self.combo.resize(250,30)
         self.combo.activated.connect(self.onActivated)
 
-        self.m = PlotCanvas(self, width=13, height=10, dpi=100, x_data=[], y_data=[])
+        self.m = PlotCanvas(self, width=13, height=8, dpi=95, x_data=[], y_data=[])
         self.m.move(0, 110)
 
 
@@ -120,20 +125,16 @@ class App(QMainWindow):
             self.option = 0
         if index == 1:
             self.option = 1
+        if index == 2:
+            self.option = 2
 
 
 
     @pyqtSlot()
     def on_click(self):
-        sensor_num = self.textbox3.text().split(',')
-        
-        
-        
-        
-        
-        
-        
-        
+        sensor_num = self.textbox3.text()
+        sensor_nums = sensor_num.split(',')
+        print(len(sensor_nums))
 #        start_time = int(self.textbox2.text())
 #        end_time = int(self.textbox.text())
         #start_time = self.textbox2.text()
@@ -142,20 +143,17 @@ class App(QMainWindow):
         end = time.strptime(self.textbox.text(), "%Y-%m-%d %H:%M:%S")
         time_start = str(int(time.mktime(start)) * 1000)
         time_end = str(int(time.mktime(end)) * 1000)
-        client = boto3.client('dynamodb',region_name='us-west-2',aws_access_key_id='AKIAI4V7PJJGQ******',aws_secret_access_key='69a/sfegtKXMHbVreSHFW*********')
+        client = boto3.client('dynamodb',region_name='us-west-2',aws_access_key_id='AKI********8MXGQ',aws_secret_access_key='bkFMhy8*************BQZ6TN6X')
         response = client.query(
-            TableName='Sensor_data',
+            TableName='Temperature_Sensing_DB_01',
             #   Select='ALL_ATTRIBUTES',
-            KeyConditionExpression= 'Sensor_ID = :a and Date_time > :b and Date_time < :c',
+                                KeyConditionExpression= 'Sensor_ID = :a and Date_time > :b',
             ExpressionAttributeValues= {
                 ':a': {
-                    'S':'sensor_01'
+                    'S':'Temperature_Sensing_BaseStation_01'
                 },
                 ':b': {
                     'S': time_start
-                },
-                ':c': {
-                    'S': time_end
                 }
             }
         )
@@ -164,28 +162,35 @@ class App(QMainWindow):
         things = response['Items']
         #print things
         if self.option == 0:
-            for thing in things:
-                payload = thing['payload']
-                M = payload['M']
-                sensor_id = M['sensorId']
-                timestamp = M['timeStamp']
-                time_temp = int(timestamp['N'])
+            for sensor_num in sensor_nums:
+                print(sensor_num)
+                for thing in things:
+                    payload = thing['payload']
+                    M = payload['M']
+                    sensor_id = M['sensorId']
+                    timestamp = M['timeStamp']
+                    time_temp = int(timestamp['N'])
 #                if (sensor_id['N'] == sensor_num) and (time_temp >= start_time) and (time_temp <= end_time):
-                if sensor_id['N'] == sensor_num:
-                    Time_num.append(time_temp)
-                    temperature = M['temp']
-                    Temp_num.append(temperature['N'])
-            temp_N = np.array(Temp_num, dtype=np.float32)
-            Time_num = np.array(Time_num) - Time_num[0]
+                    if sensor_id['N'] == sensor_num:
+                        Time_num.append(time_temp)
+                        temperature = M['temp']
+                        Temp_num.append(temperature['N'])
+                temp_N = np.array(Temp_num, dtype=np.float32)
+                Time_num = np.array(Time_num) - Time_num[0]
 
-            self.m.setXY(Time_num, temp_N)
-            self.m.plot()
+                if sensor_num == sensor_nums[0]:
+                    self.m.setXY(Time_num, temp_N)
+                else:
+                    self.m.addXY(Time_num, temp_N)
+                self.m.plot()
+                Time_num = []
+                Temp_num = []
             '''
             plt.scatter(Time_num, temp_N, s=10, c='b', marker="s")
             plt.autoscale()
             plt.show()
             '''
-
+        # 2017-11-29 17:30:00
         if self.option == 1:
             things = response['Items']
             temp_sum = 0.00
@@ -204,6 +209,7 @@ class App(QMainWindow):
             if data_num == 0:
                 print('No Available Data Points')
             else:
+                self.output_text.setText('Average Temperature is: ' + str(round(temp_sum / data_num, 4)))
                 print('The average temperature is', temp_sum / data_num)
 
 
@@ -216,10 +222,11 @@ class App(QMainWindow):
                 sensor_id = M['sensorId']
                 timestamp = M['timeStamp']
                 time_temp = int(timestamp['N'])
-                if sensor_id['N'] == sensor_num and timestamp > Max_time:
-                    Max_time = timestamp;
+                if sensor_id['N'] == sensor_num and time_temp > Max_time:
+                    Max_time = time_temp;
                     temperature = M['temp']
                     latest_temp = temperature['N']
+            self.output_text.setText('Latest Temperature is: ' + str(round(float(latest_temp), 4)))
             print('Latest Temperature is', latest_temp)
 
 class PlotCanvas(FigureCanvas):
@@ -235,8 +242,8 @@ class PlotCanvas(FigureCanvas):
                                    QSizePolicy.Expanding)
         FigureCanvas.updateGeometry(self)
 
-        self.x_data = x_data
-        self.y_data = y_data
+        self.x_data = []
+        self.y_data = []
 
         self.plot()
 
@@ -244,13 +251,20 @@ class PlotCanvas(FigureCanvas):
         if len(self.x_data) != 0:
             ax = self.figure.add_subplot(111)
             ax.clear()
-            ax.plot(self.x_data, self.y_data)
-            ax.set_title('Temperature Plot')
+            for i in range(len(self.x_data)):
+                ax.plot(self.x_data[i], self.y_data[i])
+                ax.set_title('Temperature Plot')
             self.draw()
 
     def setXY(self, input_X, input_Y):
-        self.x_data = input_X
-        self.y_data = input_Y
+        self.x_data = []
+        self.y_data = []
+        self.x_data.append(input_X)
+        self.y_data.append(input_Y)
+
+    def addXY(self, input_X, input_Y):
+        self.x_data.append(input_X)
+        self.y_data.append(input_Y)
 
 
 if __name__ == '__main__':
